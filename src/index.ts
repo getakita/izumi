@@ -1,4 +1,4 @@
-// Main Izumi class (following Vanna.AI pattern)
+// Main Izumi class (following  pattern)
 export { Izumi } from './implementations/Izumi.js';
 export { IzumiBase } from './base/IzumiBase.js';
 
@@ -16,7 +16,7 @@ export * from './types/index.js';
 
 // Import the main class and types for factory functions
 import { Izumi } from './implementations/Izumi.js';
-import type { IzumiConfig } from './types/index.js';
+import type { IzumiConfig, DatabaseConnection } from './types/index.js';
 
 // Factory functions (following Vanna pattern)
 
@@ -99,12 +99,12 @@ export function createIzumi(config: IzumiConfig) {
 }
 
 /**
- * Create an Izumi instance with OpenAI and PostgreSQL pgvector
- * Example: const izumi = createOpenAIWithPgVector('your-openai-key', pgConfig);
+ * Create an Izumi instance with OpenAI and auto-initialize with database
+ * Example: const izumi = createOpenAIWithDatabase('your-api-key', dbConnection);
  */
-export function createOpenAIWithPgVector(
+export function createOpenAIWithDatabase(
   apiKey: string, 
-  pgConfig: import('./types/index.js').PgVectorConfig,
+  dbConnection: DatabaseConnection,
   model: string = 'gpt-4o-mini'
 ) {
   return new Izumi({
@@ -113,10 +113,26 @@ export function createOpenAIWithPgVector(
       model,
       apiKey,
     },
-    vectorStore: {
-      type: 'pgvector',
-      config: pgConfig,
+    database: dbConnection,
+  });
+}
+
+/**
+ * Create an Izumi instance with Anthropic and auto-initialize with database
+ * Example: const izumi = createAnthropicWithDatabase('your-api-key', dbConnection);
+ */
+export function createAnthropicWithDatabase(
+  apiKey: string, 
+  dbConnection: DatabaseConnection,
+  model: string = 'claude-3-5-sonnet-20241022'
+) {
+  return new Izumi({
+    llm: {
+      provider: 'anthropic',
+      model,
+      apiKey,
     },
+    database: dbConnection,
   });
 }
 

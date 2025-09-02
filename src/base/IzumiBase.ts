@@ -14,9 +14,10 @@ import {
   SimilarityResult,
   IzumiConfig,
 } from '../types/index.js';
+import { SchemaParser } from '../utils/SchemaParser.js';
 
 /**
- * Abstract base class for Izumi following the Vanna.AI pattern
+ * Abstract base class for Izumi following the  pattern
  * 
  * This class provides the core functionality for text-to-SQL conversion
  * and must be extended with concrete implementations for LLM and vector store
@@ -320,6 +321,193 @@ export abstract class IzumiBase {
     ];
 
     return this.submitPrompt(prompt);
+  }
+
+  /**
+   * Automatically generate training data from database schema
+   * Uses LLM to analyze schema and create relevant question-SQL pairs
+   */
+  async generateTrainingDataFromSchema(options: {
+    numQuestions?: number;
+    includeBasicQueries?: boolean;
+    includeAdvancedQueries?: boolean;
+    includeAnalyticsQueries?: boolean;
+    customPrompt?: string;
+  } = {}): Promise<{
+    generated: number;
+    questions: QuestionSQLPair[];
+  }> {
+    const {
+      numQuestions = 10,
+      includeBasicQueries = true,
+      includeAdvancedQueries = true,
+      includeAnalyticsQueries = true,
+      customPrompt
+    } = options;
+
+    // Get current training data to understand what's already covered
+    const existingData = await this.getTrainingData();
+    const existingQuestions = new Set(existingData.questionSQL.map(q => q.question.toLowerCase()));
+
+    // Get schema information
+    const schemaInfo = await this.getSchemaInfo();
+
+    if (!schemaInfo || schemaInfo.tables.length === 0) {
+      throw new Error('No schema information available. Please train with DDL statements first.');
+    }
+
+    console.log(`Analyzing schema with ${schemaInfo.tables.length} tables...`);
+
+    // Generate training data using LLM
+    const generatedQuestions: QuestionSQLPair[] = [];
+
+    // Define query categories
+    const categories = [];
+    if (includeBasicQueries) categories.push('basic CRUD operations');
+    if (includeAdvancedQueries) categories.push('complex joins and subqueries');
+    if (includeAnalyticsQueries) categories.push('analytics and reporting');
+
+    for (const category of categories) {
+      const prompt = customPrompt || this.buildSchemaAnalysisPrompt(schemaInfo, category, numQuestions / categories.length);
+
+      try {
+        const response = await this.submitPrompt([this.systemMessage(prompt)]);
+        const newQuestions = this.parseGeneratedQuestions(response);
+
+        // Filter out duplicates and add to results
+        for (const q of newQuestions) {
+          if (!existingQuestions.has(q.question.toLowerCase())) {
+            generatedQuestions.push(q);
+            existingQuestions.add(q.question.toLowerCase());
+          }
+        }
+      } catch (error) {
+        console.error(`Error generating ${category} questions:`, error);
+      }
+    }
+
+    // Train with the generated data
+    let trained = 0;
+    for (const questionPair of generatedQuestions) {
+      try {
+        await this.addQuestionSQL(questionPair.question, questionPair.sql);
+        trained++;
+        console.log(`Trained: "${questionPair.question}"`);
+      } catch (error) {
+        console.error(`Failed to train: "${questionPair.question}"`, error);
+      }
+    }
+
+    return {
+      generated: trained,
+      questions: generatedQuestions
+    };
+  }
+
+  /**
+   * Get schema information from training data
+   */
+  private async getSchemaInfo(): Promise<DatabaseSchema | null> {
+    const trainingData = await this.getTrainingData();
+
+    if (trainingData.ddl.length === 0) {
+      return null;
+    }
+
+    // Combine all DDL statements
+    const combinedDDL = trainingData.ddl.map(d => d.ddl).join('\n\n');
+
+    // Parse the schema
+    return SchemaParser.parseDDL(combinedDDL);
+  }
+
+  /**
+   * Build prompt for schema analysis
+   */
+  private buildSchemaAnalysisPrompt(schema: DatabaseSchema, category: string, numQuestions: number): string {
+    let prompt = `You are a SQL expert. Analyze the following database schema and generate ${Math.ceil(numQuestions)} diverse ${category} questions with their corresponding SQL queries.
+
+Database Schema:
+`;
+
+    // Add table information
+    for (const table of schema.tables) {
+      prompt += `\nTable: ${table.name}\n`;
+      prompt += `Columns:\n`;
+      for (const col of table.columns) {
+        prompt += `  - ${col.name} (${col.type})${col.nullable ? '' : ' NOT NULL'}${col.primaryKey ? ' PRIMARY KEY' : ''}\n`;
+      }
+
+      if (table.primaryKey && table.primaryKey.length > 0) {
+        prompt += `Primary Key: ${table.primaryKey.join(', ')}\n`;
+      }
+
+      if (table.foreignKeys && table.foreignKeys.length > 0) {
+        prompt += `Foreign Keys:\n`;
+        for (const fk of table.foreignKeys) {
+          prompt += `  - ${fk.column} -> ${fk.referencedTable}.${fk.referencedColumn}\n`;
+        }
+      }
+    }
+
+    prompt += `
+
+Requirements:
+1. Generate realistic, practical questions that users might actually ask
+2. Ensure SQL queries are syntactically correct for ${this.dialect}
+3. Cover different types of operations appropriate for the category
+4. Use proper table and column names from the schema
+5. Include WHERE clauses, JOINs, aggregations, etc. as appropriate
+
+Format your response as:
+Question: [Natural language question]
+SQL: [SQL query]
+
+Question: [Next question]
+SQL: [Next SQL query]
+
+...`;
+
+    return prompt;
+  }
+
+  /**
+   * Parse generated questions from LLM response
+   */
+  private parseGeneratedQuestions(response: string): QuestionSQLPair[] {
+    const questions: QuestionSQLPair[] = [];
+    const lines = response.split('\n');
+
+    let currentQuestion = '';
+    let currentSQL = '';
+
+    for (const line of lines) {
+      if (line.startsWith('Question:')) {
+        if (currentQuestion && currentSQL) {
+          questions.push({
+            question: currentQuestion.trim(),
+            sql: currentSQL.trim()
+          });
+        }
+        currentQuestion = line.substring(9).trim();
+        currentSQL = '';
+      } else if (line.startsWith('SQL:')) {
+        currentSQL = line.substring(4).trim();
+      } else if (currentSQL && line.trim()) {
+        // Continue SQL if it spans multiple lines
+        currentSQL += '\n' + line.trim();
+      }
+    }
+
+    // Add the last pair
+    if (currentQuestion && currentSQL) {
+      questions.push({
+        question: currentQuestion.trim(),
+        sql: currentSQL.trim()
+      });
+    }
+
+    return questions;
   }
 
   // Abstract methods that must be implemented by subclasses

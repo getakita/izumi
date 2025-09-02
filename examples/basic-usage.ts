@@ -1,116 +1,131 @@
 /**
- * Basic usage example of Izumi following Vanna.AI pattern
+ * Basic usage example of Izumi - Simplified Auto-Initialization
  */
-import { createOpenAIIzumi, createAnthropicIzumi, Izumi } from '../src/index.js';
+import { createOpenAIWithDatabase, createAnthropicWithDatabase } from '../src/index.js';
 
 async function basicExample() {
-  // Create an Izumi instance with OpenAI
-  const izumi = createOpenAIIzumi('your-openai-api-key');
+  console.log('🚀 Basic Izumi Example with Auto-Initialization\n');
 
-  // 1. Train with DDL schema
-  await izumi.train({
-    ddl: `
-      CREATE TABLE users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+  // Example database connection (replace with your actual DB)
+  const dbConnection = {
+    type: 'postgresql' as const,
+    runSQL: async (sql: string) => {
+      // Mock database response for demo
+      console.log('📊 Executing SQL:', sql);
 
-      CREATE TABLE posts (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(255) NOT NULL,
-        content TEXT,
-        user_id INTEGER REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `
-  });
+      if (sql.includes('information_schema')) {
+        return [
+          { ddl: 'CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);' },
+          { ddl: 'CREATE TABLE posts (id SERIAL PRIMARY KEY, title VARCHAR(255) NOT NULL, content TEXT, user_id INTEGER REFERENCES users(id), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);' }
+        ];
+      }
 
-  // 2. Train with documentation
-  await izumi.train({
-    documentation: 'Users table contains user information. Posts table contains blog posts written by users.'
-  });
-
-  // 3. Train with example question-SQL pairs
-  await izumi.train({
-    question: 'Get all users',
-    sql: 'SELECT * FROM users'
-  });
-
-  await izumi.train({
-    question: 'Get posts with user names',
-    sql: 'SELECT p.*, u.name as author_name FROM posts p JOIN users u ON p.user_id = u.id'
-  });
-
-  // 4. Ask questions
-  const response1 = await izumi.ask('Show me all users created in the last week');
-  console.log('SQL:', response1.sql);
-  console.log('Explanation:', response1.explanation);
-
-  const response2 = await izumi.ask('Get the latest 5 posts with author information');
-  console.log('SQL:', response2.sql);
-
-  // 5. Generate SQL directly (bypasses retrieval)
-  const directSQL = await izumi.generateSQL('Count total posts per user');
-  console.log('Direct SQL:', directSQL);
-
-  // 6. Export schema in different formats
-  const jsonSchema = izumi.exportSchema({ format: 'json' });
-  console.log('JSON Schema:', jsonSchema);
-
-  const drizzleSchema = izumi.exportSchema({ format: 'drizzle' });
-  console.log('Drizzle Schema:', drizzleSchema);
-}
-
-async function advancedExample() {
-  // Using custom configuration
-  const izumi = new Izumi({
-    llm: {
-      provider: 'anthropic',
-      apiKey: 'your-anthropic-api-key',
-      model: 'claude-3-5-sonnet-20241022'
-    }
-    // vectorStore config can be omitted to use defaults
-  });
-
-  // Train with Drizzle schema
-  const drizzleSchema = {
-    users: {
-      id: { type: 'serial', primaryKey: true },
-      name: { type: 'varchar', length: 100, notNull: true },
-      email: { type: 'varchar', length: 255, unique: true, notNull: true }
+      return [];
     }
   };
 
-  await izumi.train({
-    ddl: JSON.stringify(drizzleSchema)
-  });
+  // Create Izumi with auto-initialization - that's it!
+  const izumi = createOpenAIWithDatabase('your-openai-api-key', dbConnection);
 
-  // Ask with additional context
-  const response = await izumi.ask('Find users with duplicate emails');
+  // Wait for auto-initialization to complete
+  console.log('⏳ Auto-initializing with database schema...');
+  await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for async initialization
+  console.log('✅ Ready to answer questions!\n');
 
-  console.log('Response:', response);
+  // Ask questions immediately - no manual training needed!
+  console.log('❓ Asking questions:\n');
+
+  const questions = [
+    'Show me all users created in the last week',
+    'Get the latest 5 posts with author information',
+    'Count total posts per user',
+    'Find users who haven\'t posted anything'
+  ];
+
+  for (const question of questions) {
+    console.log(`🤔 ${question}`);
+    try {
+      const response = await izumi.ask(question);
+      console.log(`🔍 SQL: ${response.sql}`);
+      if (response.explanation) {
+        console.log(`💡 ${response.explanation}`);
+      }
+      console.log('');
+    } catch (error) {
+      console.error(`❌ Error: ${error.message}\n`);
+    }
+  }
+
+  // Export schema if needed
+  console.log('📄 Exporting schema:');
+  const jsonSchema = izumi.exportSchema({ format: 'json' });
+  console.log('JSON Schema length:', jsonSchema.length);
+
+  console.log('\n🎉 Basic example completed!');
+}
+
+async function advancedExample() {
+  console.log('🚀 Advanced Example with Anthropic\n');
+
+  // Database connection
+  const dbConnection = {
+    type: 'postgresql' as const,
+    runSQL: async (sql: string) => {
+      console.log('📊 Executing SQL:', sql);
+      // Mock response
+      if (sql.includes('information_schema')) {
+        return [
+          { ddl: 'CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100), email VARCHAR(255));' },
+          { ddl: 'CREATE TABLE orders (id SERIAL PRIMARY KEY, user_id INTEGER, total DECIMAL(10,2));' }
+        ];
+      }
+      return [];
+    }
+  };
+
+  // Use Anthropic instead of OpenAI
+  const izumi = createAnthropicWithDatabase('your-anthropic-api-key', dbConnection);
+
+  await new Promise(resolve => setTimeout(resolve, 3000));
+
+  const response = await izumi.ask('Find users who haven\'t placed any orders');
+  console.log('🔍 SQL:', response.sql);
+  console.log('✅ Advanced example completed!');
 }
 
 async function multiProviderExample() {
+  console.log('🚀 Multi-Provider Comparison\n');
+
+  const dbConnection = {
+    type: 'postgresql' as const,
+    runSQL: async (sql: string) => {
+      if (sql.includes('information_schema')) {
+        return [
+          { ddl: 'CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));' },
+          { ddl: 'CREATE TABLE posts (id SERIAL PRIMARY KEY, user_id INTEGER, created_at TIMESTAMP);' }
+        ];
+      }
+      return [];
+    }
+  };
+
   // Compare different providers
   const providers = [
-    createOpenAIIzumi('openai-key'),
-    createAnthropicIzumi('anthropic-key')
+    { name: 'OpenAI', instance: createOpenAIWithDatabase('openai-key', dbConnection) },
+    { name: 'Anthropic', instance: createAnthropicWithDatabase('anthropic-key', dbConnection) }
   ];
 
   const question = 'Get users who have posted in the last month';
 
-  for (const [index, izumi] of providers.entries()) {
-    // Train each with the same data
-    await izumi.train({
-      ddl: 'CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100)); CREATE TABLE posts (id SERIAL PRIMARY KEY, user_id INTEGER, created_at TIMESTAMP);'
-    });
+  for (const provider of providers) {
+    console.log(`🤖 Testing ${provider.name}:`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const response = await izumi.ask(question);
-    console.log(`Provider ${index + 1} SQL:`, response.sql);
+    const response = await provider.instance.ask(question);
+    console.log(`🔍 SQL: ${response.sql}\n`);
   }
+
+  console.log('✅ Multi-provider comparison completed!');
 }
 
 export { basicExample, advancedExample, multiProviderExample };
