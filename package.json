@@ -1,0 +1,36 @@
+{
+  "name": "izumi",
+  "version": "1.0.0",
+  "type": "module",
+  "types": "./lib/index.d.ts",
+  "main": "./lib/index.js",
+  "files": [
+    "lib/**/*"
+  ],
+  "scripts": {
+    "clean": "del-cli ./lib",
+    "build": "npm run clean && tsc -p ./tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "test": "node --experimental-strip-types --test",
+    "prepack": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/getakita/izumi.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/getakita/izumi/issues"
+  },
+  "homepage": "https://github.com/getakita/izumi#readme",
+  "description": "",
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "ultracite": "^5.3.1",
+    "@types/node": "^24.3.0",
+    "del-cli": "^6.0.0"
+  }
+}
