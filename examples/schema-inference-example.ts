@@ -1,10 +1,10 @@
 // Simple Example: Auto-initialize with database and start asking questions
-import { createOpenAIWithDatabase } from '../lib/index.js';
+import { createOpenAIWithDatabase, type DatabaseConnection } from '../src/index.js';
 
 // Example database connection (replace with your actual database)
-const dbConnection = {
+const dbConnection: DatabaseConnection = {
   type: 'postgresql', // or 'mysql', 'sqlite'
-  runSQL: async (sql) => {
+  runSQL: async (sql: string) => {
     // Replace this with your actual database connection
     // For PostgreSQL: use pg.Client
     // For MySQL: use mysql2
@@ -30,7 +30,7 @@ async function main() {
 
   // Just provide API key and database connection - that's it!
   const izumi = createOpenAIWithDatabase(
-    process.env.OPENAI_API_KEY,
+    process.env.OPENAI_API_KEY!,
     dbConnection
   );
 
@@ -64,7 +64,7 @@ async function main() {
 // Handle missing API key
 if (!process.env.OPENAI_API_KEY) {
   console.error('❌ Please set OPENAI_API_KEY environment variable');
-  console.log('Example: OPENAI_API_KEY=your-key-here node examples/simple-example.js');
+  console.log('Example: OPENAI_API_KEY=your-key-here node examples/schema-inference-example.ts');
   process.exit(1);
 }
 

@@ -51,7 +51,23 @@ export class Izumi extends IzumiBase {
 
     // Auto-initialize if database config is provided
     if (config.database) {
-      this.autoInitializeWithDatabase(config.database);
+      // Start auto-initialization asynchronously after model is ready
+      this.startAutoInitialization(config.database);
+    }
+  }
+
+  /**
+   * Start auto-initialization asynchronously after ensuring model is ready
+   */
+  private async startAutoInitialization(dbConfig: DatabaseConnection): Promise<void> {
+    try {
+      // Wait for LLM model to be fully initialized
+      await this.llm.waitForInitialization();
+      
+      // Now proceed with auto-initialization
+      await this.autoInitializeWithDatabase(dbConfig);
+    } catch (error) {
+      console.error('Auto-initialization failed:', error);
     }
   }
 

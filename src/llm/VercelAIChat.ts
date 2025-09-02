@@ -7,62 +7,62 @@ import { LLMConfig, Message, EmbeddingResponse } from '../types/index.js';
  */
 export class VercelAIChat {
   private config: LLMConfig;
-  private model: LanguageModel;
+  private model: LanguageModel | null = null;
   private embeddingModel: EmbeddingModel<string> | null = null;
 
   constructor(config: LLMConfig) {
     this.config = config;
-    this.model = this.createModel();
-    this.embeddingModel = this.createEmbeddingModel();
+    this.initializeAsync();
   }
 
-  private createModel(): LanguageModel {
+  private async initializeAsync() {
+    this.model = await this.createModel();
+    this.embeddingModel = await this.createEmbeddingModel();
+  }
+
+  /**
+   * Check if the model is fully initialized and ready to use
+   */
+  isInitialized(): boolean {
+    return this.model !== null;
+  }
+
+  /**
+   * Wait for model initialization to complete
+   */
+  async waitForInitialization(): Promise<void> {
+    while (!this.isInitialized()) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  private async createModel(): Promise<LanguageModel> {
     const { provider, model: modelName, apiKey, baseURL } = this.config;
 
     switch (provider) {
       case 'openai': {
-        const { openai } = require('@ai-sdk/openai');
-        const client = openai({
-          apiKey: apiKey || process.env.OPENAI_API_KEY,
-          baseURL,
-        });
-        return client(modelName || 'gpt-4o-mini');
+        const { openai } = await import('@ai-sdk/openai');
+        return openai(modelName || 'gpt-4o-mini');
       }
 
       case 'anthropic': {
-        const { anthropic } = require('@ai-sdk/anthropic');
-        const client = anthropic({
-          apiKey: apiKey || process.env.ANTHROPIC_API_KEY,
-          baseURL,
-        });
-        return client(modelName || 'claude-3-5-sonnet-20241022');
+        const { anthropic } = await import('@ai-sdk/anthropic');
+        return anthropic(modelName || 'claude-3-5-sonnet-20241022');
       }
 
       case 'google': {
-        const { google } = require('@ai-sdk/google');
-        const client = google({
-          apiKey: apiKey || process.env.GOOGLE_API_KEY,
-          baseURL,
-        });
-        return client(modelName || 'gemini-1.5-pro');
+        const { google } = await import('@ai-sdk/google');
+        return google(modelName || 'gemini-1.5-pro');
       }
 
       case 'mistral': {
-        const { mistral } = require('@ai-sdk/mistral');
-        const client = mistral({
-          apiKey: apiKey || process.env.MISTRAL_API_KEY,
-          baseURL,
-        });
-        return client(modelName || 'mistral-large-latest');
+        const { mistral } = await import('@ai-sdk/mistral');
+        return mistral(modelName || 'mistral-large-latest');
       }
 
       case 'cohere': {
-        const { cohere } = require('@ai-sdk/cohere');
-        const client = cohere({
-          apiKey: apiKey || process.env.COHERE_API_KEY,
-          baseURL,
-        });
-        return client(modelName || 'command-r-plus');
+        const { cohere } = await import('@ai-sdk/cohere');
+        return cohere(modelName || 'command-r-plus');
       }
 
       default:
@@ -70,27 +70,19 @@ export class VercelAIChat {
     }
   }
 
-  private createEmbeddingModel(): EmbeddingModel<string> | null {
+  private async createEmbeddingModel(): Promise<EmbeddingModel<string> | null> {
     const { provider, apiKey, baseURL } = this.config;
 
     try {
       switch (provider) {
         case 'openai': {
-          const { openai } = require('@ai-sdk/openai');
-          const client = openai({
-            apiKey: apiKey || process.env.OPENAI_API_KEY,
-            baseURL,
-          });
-          return client.embedding('text-embedding-3-small');
+          const { openai } = await import('@ai-sdk/openai');
+          return openai.embedding('text-embedding-3-small');
         }
 
         case 'google': {
-          const { google } = require('@ai-sdk/google');
-          const client = google({
-            apiKey: apiKey || process.env.GOOGLE_API_KEY,
-            baseURL,
-          });
-          return client.textEmbeddingModel('text-embedding-004');
+          const { google } = await import('@ai-sdk/google');
+          return google.textEmbeddingModel('text-embedding-004');
         }
 
         // Other providers don't have embedding support in AI SDK yet
@@ -108,6 +100,10 @@ export class VercelAIChat {
   }
 
   async submitPrompt(messages: Message[]): Promise<string> {
+    if (!this.model) {
+      throw new Error('Model not initialized. Please wait for initialization to complete.');
+    }
+
     try {
       const result = await generateText({
         model: this.model,
@@ -193,10 +189,10 @@ export class VercelAIChat {
     return Math.abs(hash);
   }
 
-  updateConfig(newConfig: Partial<LLMConfig>): void {
+  async updateConfig(newConfig: Partial<LLMConfig>): Promise<void> {
     this.config = { ...this.config, ...newConfig };
-    this.model = this.createModel();
-    this.embeddingModel = this.createEmbeddingModel();
+    this.model = await this.createModel();
+    this.embeddingModel = await this.createEmbeddingModel();
   }
 
   getConfig(): LLMConfig {
