@@ -8,13 +8,21 @@ import {
 } from '../types/index.js';
 
 // Optional pg import - only used if pgvector is available
-let Pool: any, PoolClient: any;
-try {
-  const pg = require('pg');
-  Pool = pg.Pool;
-  PoolClient = pg.PoolClient;
-} catch (error) {
-  console.warn('pg module not found. PgVectorStore will not be available.');
+let Pool: any;
+
+// Function to dynamically load pg module
+async function loadPgModule() {
+  if (Pool) return { Pool };
+  
+  try {
+    // Try ES module import first
+    const pg = await import('pg');
+    Pool = pg.default?.Pool || pg.Pool;
+    return { Pool };
+  } catch (error: any) {
+    console.warn('pg module not found. PgVectorStore will not be available.');
+    throw new Error(`PostgreSQL module not available: ${error.message}`);
+  }
 }
 
 /**
@@ -25,26 +33,52 @@ export class PgVectorStore {
   private config: PgVectorConfig;
   private embeddingDimension: number;
   private schema: string;
+  private initialized: boolean = false;
 
   constructor(config: PgVectorConfig) {
     this.config = config;
     this.embeddingDimension = config.embeddingDimension || 384;
     this.schema = config.schema || 'izumi';
-    
-    // Create PostgreSQL pool
-    if (config.connectionString) {
-      this.pool = new Pool({
-        connectionString: config.connectionString,
-      });
-    } else {
-      this.pool = new Pool({
-        host: config.host || 'localhost',
-        port: config.port || 5432,
-        database: config.database || 'izumi',
-        user: config.user || 'postgres',
-        password: config.password,
-        ssl: config.ssl || false,
-      });
+  }
+
+  /**
+   * Initialize the PostgreSQL connection pool
+   * Must be called before using other methods
+   */
+  async connect(): Promise<void> {
+    if (this.initialized) return;
+
+    try {
+      const { Pool: PgPool } = await loadPgModule();
+      
+      // Create PostgreSQL pool
+      if (this.config.connectionString) {
+        this.pool = new PgPool({
+          connectionString: this.config.connectionString,
+        });
+      } else {
+        this.pool = new PgPool({
+          host: this.config.host || 'localhost',
+          port: this.config.port || 5432,
+          database: this.config.database || 'izumi',
+          user: this.config.user || 'postgres',
+          password: this.config.password,
+          ssl: this.config.ssl || false,
+        });
+      }
+
+      this.initialized = true;
+    } catch (error) {
+      throw new Error(`Failed to initialize PgVectorStore: ${error}`);
+    }
+  }
+
+  /**
+   * Ensure connection is established before using pool
+   */
+  private async ensureConnected(): Promise<void> {
+    if (!this.initialized) {
+      await this.connect();
     }
   }
 
@@ -52,6 +86,9 @@ export class PgVectorStore {
    * Initialize the vector store by creating necessary tables and extensions
    */
   async initialize(): Promise<void> {
+    // First ensure we're connected
+    await this.ensureConnected();
+    
     const client = await this.pool.connect();
     
     try {
@@ -133,6 +170,8 @@ export class PgVectorStore {
    * Store a question-SQL pair with its embedding
    */
   async storeQuestionSQL(item: QuestionSQLPair): Promise<void> {
+    await this.ensureConnected();
+    
     if (!item.embedding) {
       throw new Error('Embedding is required for storage');
     }

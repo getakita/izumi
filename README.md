@@ -221,6 +221,45 @@ const izumi = new Izumi({
 });
 ```
 
+## 🧪 Testing & Development
+
+Izumi includes a comprehensive test environment with a real PostgreSQL database and sample e-commerce data for testing and development.
+
+### Quick Test Setup
+```powershell
+# Set up test environment with Docker
+npm run test:setup
+
+# Test database connectivity  
+npm run test:db
+
+# Run sample SQL queries
+npm run test:queries
+
+# Test Izumi with natural language (requires OpenAI API key)
+npm run test:basic
+
+# Interactive query testing
+npm run test:interactive
+```
+
+### Test Database
+The test environment includes:
+- **PostgreSQL 16** with **pgvector** extension
+- **E-commerce sample data**: 10 users, 10 products, 10 orders, reviews, inventory
+- **Realistic scenarios**: Multi-table joins, aggregations, complex business logic
+- **Docker setup**: Complete containerized environment
+
+### Sample Questions
+Try asking Izumi these natural language questions:
+- "How many users are registered?"
+- "What are our best-selling products?"
+- "Show me customers who haven't ordered anything"
+- "Which products have the highest ratings?"
+- "What's the total revenue from delivered orders?"
+
+For detailed testing instructions, see [`test/TESTING_GUIDE.md`](test/TESTING_GUIDE.md).
+
 ## License
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
